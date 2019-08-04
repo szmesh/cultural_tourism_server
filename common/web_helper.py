@@ -27,18 +27,20 @@ def get_session():
     return request.environ.get('beaker.session')
 
 
-def return_msg(state, msg, data={}):
+def return_msg(state, tips, data={}, err=''):
     """
     接口输出数据到客户端
     :param state:   状态码（公共参数，-1=出错，0=正常）
-    :param msg:     说明信息（公共参数）
+    :param tips:    说明信息（公共参数）
     :param data:    数据字典
+    :param err:     开发角度的错误说明
     :return:        返回组合后的json字符串
     """
     msg = {
         "state": state,
-        "msg": msg,
-        "data": data
+        "tips": tips,
+        "data": data,
+        "err": err
     }
     # 将字典转为字符串输出
     message = json.dumps(msg, cls=json_helper.CJsonEncoder)

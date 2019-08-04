@@ -2,7 +2,8 @@
 # coding=utf-8
 
 from bottle import put
-from common import web_helper, encrypt_helper, db_helper
+from common import web_helper, encrypt_helper, db_helper, error_helper
+from common.status_helper import Status
 
 
 @put('/mcts/api/login/')
@@ -27,17 +28,19 @@ def post_login():
         s.save()
     # 判断用户提交的验证码和存储在session中的验证码是否相同
     if verify.upper() != verify_code:
-        return web_helper.return_msg(-1, '验证码错误')
+        model = error_helper.verify_invalid()
+        return web_helper.return_msg(model['state'], model['tips'], err=model['err'])
 
     ##############################################################
     ### 获取登录用户记录，并进行登录验证 ###
     ##############################################################
-    sql = """select * from manager where login_name='%s'""" % (username,)
+    sql = """select * from user where account='%s'""" % (username,)
     # 从数据库中读取用户信息
     manager_result = db_helper.read(sql)
     # 判断用户记录是否存在
     if not manager_result:
-        return web_helper.return_msg(-1, '账户不存在')
+        model = error_helper.user_notfound()
+        return web_helper.return_msg(model['state'], model['tips'], err=model['err'])
 
     ##############################################################
     ### 验证用户登录密码与状态 ###
@@ -47,28 +50,31 @@ def post_login():
     # 对客户端提交上来的验证进行md5加密将转为大写（只加密一次）
     pwd = encrypt_helper.md5(password).upper()
     # 检查登录密码输入是否正确
-    if pwd != manager_result[0].get('login_password', ''):
-        return web_helper.return_msg(-1, '密码错误')
+    if pwd != manager_result[0].get('password', ''):
+        model = error_helper.password_invalid()
+        return web_helper.return_msg(model['state'], model['tips'], err=model['err'])
     # 检查该账号虽否禁用了
-    if manager_result[0].get('is_enable', 0) == 0:
-        return web_helper.return_msg(-1, '账号已被禁用')
+    if manager_result[0].get('status', 0) == Status.INVALID:
+        model = error_helper.user_invalid()
+        return web_helper.return_msg(model['state'], model['tips'])
 
     ##############################################################
     ### 把用户信息保存到session中 ###
     ##############################################################
-    manager_id = manager_result[0].get('id', 0)
-    s['id'] = manager_id
-    s['login_name'] = username
+    manager_id = manager_result[0].get('mid', 0)
+    s['mid'] = manager_id
+    s['account'] = username
     s.save()
 
     ##############################################################
     ### 更新用户信息到数据库 ###
     ##############################################################
     # 更新当前管理员最后登录时间、Ip与登录次数（字段说明，请看数据字典）
-    sql = """update manager set last_login_time=%s, last_login_ip=%s, login_count=login_count+1 where id=%s"""
+    sql = """update user set last_login_time=%s, last_login_ip=%s where id=%s"""
     # 组合更新值
-    vars = ('now()', ip, manager_id,)
+    vars = ('now()', ip, manager_id)
     # 写入数据库
     db_helper.write(sql, vars)
 
-    return web_helper.return_msg(0, '登录成功')
+    model = error_helper.login_success()
+    return web_helper.return_msg(model['state'], model['tips'])
